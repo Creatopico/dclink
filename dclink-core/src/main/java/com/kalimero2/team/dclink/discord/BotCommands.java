@@ -130,7 +130,7 @@ public class BotCommands extends ListenerAdapter {
             String name = minecraftOption.getAsString();
             UUID uuid = dcLink.getUUID(name);
             if (uuid == null) {
-                event.reply("Could not find Minecraft account with name " + name).setEphemeral(true).queue();
+                event.reply("Could not find Minecraft account with lastKnownName " + name).setEphemeral(true).queue();
                 return;
             }
             MinecraftPlayer minecraftPlayer = dcLink.getMinecraftPlayer(uuid);
@@ -159,7 +159,7 @@ public class BotCommands extends ListenerAdapter {
             }
 
             if (minecraftUuid == null) {
-                event.reply("Could not find Minecraft account with name " + playerName).setEphemeral(true).queue();
+                event.reply("Could not find Minecraft account with lastKnownName " + playerName).setEphemeral(true).queue();
             } else {
                 MinecraftPlayer minecraftPlayer = dcLink.getMinecraftPlayer(minecraftUuid);
                 if (minecraftPlayer == null) {

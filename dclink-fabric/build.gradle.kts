@@ -27,7 +27,6 @@ dependencies {
     include(libs.jda) {
         exclude(module = "opus-java")
     }
-    include(libs.sqlite)
 }
 
 tasks {

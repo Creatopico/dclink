@@ -14,7 +14,17 @@ dependencyResolutionManagement{
 
             library("jda","net.dv8tion","JDA").versionRef("jda")
             library("configurate-hocon","org.spongepowered","configurate-hocon").versionRef("configurate-hocon")
-            library("sqlite","org.xerial","sqlite-jdbc").versionRef("sqlite")
+
+            version("jdbi3-core", "3.44.0")
+            version("jdbi3-postgres", "3.44.0")
+            version("jdbi3-sqlobject", "3.44.0")
+            version("postgresql", "42.7.1")
+
+            library("postgresql", "org.postgresql", "postgresql").versionRef("postgresql")
+            library("jdbi3-core", "org.jdbi", "jdbi3-core").versionRef("jdbi3-core")
+            library("jdbi3-postgres", "org.jdbi", "jdbi3-postgres").versionRef("jdbi3-postgres")
+            library("jdbi3-sqlobject", "org.jdbi", "jdbi3-sqlobject").versionRef("jdbi3-sqlobject")
+
             library("adventure-api","net.kyori","adventure-api").versionRef("adventure")
             library("adventure-minimessage","net.kyori","adventure-text-minimessage").versionRef("adventure")
             library("floodgate-api","org.geysermc.floodgate","api").versionRef("floodgate-api")

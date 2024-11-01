@@ -5,132 +5,79 @@ import com.kalimero2.team.dclink.api.discord.DiscordAccount;
 import com.kalimero2.team.dclink.api.minecraft.MinecraftPlayer;
 import com.kalimero2.team.dclink.impl.discord.DiscordAccountImpl;
 import com.kalimero2.team.dclink.impl.minecraft.MinecraftPlayerImpl;
-import org.intellij.lang.annotations.Language;
+import org.jdbi.v3.core.Handle;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.postgres.PostgresPlugin;
+import org.jdbi.v3.sqlobject.SqlObjectPlugin;
 
-import java.io.File;
-import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 public class Storage {
     private final DCLink dcLink;
-    private Connection connection;
+    public static Jdbi JDBI;
 
-    public Storage(DCLink dcLink, File dataBase) {
+    public Storage(DCLink dcLink, Properties connection) {
         this.dcLink = dcLink;
 
-        try {
-            Class.forName("org.sqlite.JDBC");
-            connection = DriverManager.getConnection("jdbc:sqlite:" + dataBase.getPath());
-            createTablesIfNotExists();
+        String url = String.format(
+                "jdbc:postgresql://%s:%s/%s",
+                connection.get("address"),
+                connection.get("port"),
+                connection.get("database")
+        );
 
-        } catch (ClassNotFoundException | SQLException e) {
-            dcLink.getLogger().error("Error while creating database connection", e);
+        try {
+            DriverManager.registerDriver(new org.postgresql.Driver());
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
 
-    }
+        JDBI = Jdbi.create(url, connection)
+                .installPlugin(new SqlObjectPlugin())
+                .installPlugin(new PostgresPlugin());
 
-    private void createTablesIfNotExists() throws SQLException {
-        createDiscordTableIfNotExists();
-        createMinecraftTableIfNotExists();
-        updateMinecraftTable();
+        createTables();
         dcLink.getLogger().info("Database initialized");
     }
 
-    private ResultSet executeQuery(@Language(value = "SQL") String query, Object... args) throws SQLException {
-        PreparedStatement statement = connection.prepareStatement(query);
-        for (int i = 0; i < args.length; i++) {
-            statement.setObject(i + 1, args[i]);
-        }
-        return statement.executeQuery();
-    }
-
-    private void createDiscordTableIfNotExists() throws SQLException {
-        Statement statement = connection.createStatement();
-        statement.executeUpdate(
-                "CREATE TABLE IF NOT EXISTS DISCORD_ACCOUNTS (" +
-                        "    DISCORD_ID TEXT PRIMARY KEY NOT NULL UNIQUE" +
-                        ");"
-        );
-        statement.close();
-    }
-
-    private void createMinecraftTableIfNotExists() throws SQLException {
-        Statement statement = connection.createStatement();
-        statement.executeUpdate(
-                "CREATE TABLE IF NOT EXISTS MINECRAFT_ACCOUNTS(" +
-                        "    UUID               TEXT PRIMARY KEY NOT NULL UNIQUE," +
-                        "    LAST_KNOWN_NAME    TEXT NULL," +
-                        "    DISCORD_ID         TEXT NULL," +
-                        "    FOREIGN KEY (DISCORD_ID) REFERENCES DISCORD_ACCOUNTS(DISCORD_ID)" +
-                        ");"
-        );
-        statement.close();
-    }
-
-    private void updateMinecraftTable() throws SQLException {
-        Statement checkStatement = connection.createStatement();
-        ResultSet resultSet = checkStatement.executeQuery("PRAGMA table_info(MINECRAFT_ACCOUNTS);");
-        boolean hasLastKnownName = false;
-        while (resultSet.next()) {
-            if (resultSet.getString("name").equalsIgnoreCase("last_known_name")) {
-                hasLastKnownName = true;
-                break;
-            }
-        }
-        if (!hasLastKnownName) {
-            dcLink.getLogger().info("Updating MINECRAFT_ACCOUNTS table");
-            Statement addStatement = connection.createStatement();
-            addStatement.executeUpdate(
-                    "ALTER TABLE MINECRAFT_ACCOUNTS ADD COLUMN LAST_KNOWN_NAME TEXT NULL;"
-            );
-            addStatement.close();
+    private void createTables() {
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.createDiscordTable();
+            storageDao.createMinecraftTableIfNotExists();
         }
     }
 
     private void saveDiscordAccount(DiscordAccount discordAccount) throws SQLException {
-        Statement statement = connection.createStatement();
-        statement.executeUpdate("INSERT OR IGNORE INTO DISCORD_ACCOUNTS (DISCORD_ID) VALUES ('" + discordAccount.getId() + "');");
-        statement.close();
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.saveDiscordAccount(discordAccount.getId());
+        }
     }
 
     public void createMinecraftPlayer(UUID uuid, String name) throws SQLException {
-        Statement statement = connection.createStatement();
-        statement.executeUpdate("INSERT OR IGNORE INTO MINECRAFT_ACCOUNTS (UUID, DISCORD_ID, LAST_KNOWN_NAME) VALUES ('" + uuid + "', '" + null + "', '" + name + "' );");
-        statement.close();
-    }
-
-    public void close() {
-        try {
-            connection.close();
-        } catch (SQLException e) {
-            dcLink.getLogger().error("Error while closing database connection", e);
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.createMinecraftPlayer(uuid, name);
         }
     }
 
     public String getLastKnownName(UUID uuid) throws SQLException {
-        ResultSet resultSet = executeQuery("SELECT LAST_KNOWN_NAME FROM MINECRAFT_ACCOUNTS WHERE UUID = ?", uuid.toString());
-        if (resultSet.next()) {
-            return resultSet.getString("LAST_KNOWN_NAME");
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            return storageDao.getPlayerById(uuid).lastKnownName();
         }
-        resultSet.close();
-        return null;
     }
 
     public void setLastKnownName(UUID uuid, String name) throws SQLException {
-        PreparedStatement pstmt = connection.prepareStatement("UPDATE MINECRAFT_ACCOUNTS SET LAST_KNOWN_NAME = ? WHERE UUID = ?;");
-        pstmt.setString(1, name);
-        pstmt.setString(2, uuid.toString());
-        pstmt.executeUpdate();
-        pstmt.close();
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.setLastKnownName(uuid, name);
+        }
     }
 
     public DiscordAccount getDiscordAccount(String discordID) throws SQLException {
@@ -147,46 +94,45 @@ public class Storage {
             }
         };
 
-        ResultSet resultSet = executeQuery("SELECT UUID, LAST_KNOWN_NAME FROM MINECRAFT_ACCOUNTS WHERE DISCORD_ID = ?", discordID);
-        while (resultSet.next()) {
-            linkedPlayers.add(new MinecraftPlayerImpl(UUID.fromString(resultSet.getString("UUID")), resultSet.getString("LAST_KNOWN_NAME")) {
-                @Override
-                public DiscordAccount getDiscordAccount() {
-                    return discordAccount;
-                }
-            });
-        }
-        resultSet.close();
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            MinecraftPlayerEntity playerEntity = storageDao.getPlayerByDiscord(discordID);
 
+            if (playerEntity != null) {
+                linkedPlayers.add(new MinecraftPlayerImpl(playerEntity.id(), playerEntity.lastKnownName()) {
+                    @Override
+                    public DiscordAccount getDiscordAccount() {
+                        return discordAccount;
+                    }
+                });
+            }
+        }
 
         saveDiscordAccount(discordAccount);
         return discordAccount;
     }
 
     public UUID getUUIDByLastKnownName(String username) throws SQLException {
-        ResultSet resultSet = executeQuery("SELECT UUID FROM MINECRAFT_ACCOUNTS WHERE LAST_KNOWN_NAME = ?", username);
-        if (resultSet.next()) {
-            return UUID.fromString(resultSet.getString("UUID"));
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            return storageDao.getPlayerByName(username).id();
         }
-        resultSet.close();
-        return null;
     }
 
 
     public MinecraftPlayer getMinecraftPlayer(UUID uuid) throws SQLException {
-        ResultSet resultSet = executeQuery("SELECT LAST_KNOWN_NAME, DISCORD_ID FROM MINECRAFT_ACCOUNTS WHERE UUID = ?", uuid.toString());
-        MinecraftPlayerImpl minecraftPlayer = null;
-        if (resultSet.next()) {
-            String lastKnownName = resultSet.getString("LAST_KNOWN_NAME");
-            String discordID = resultSet.getString("DISCORD_ID");
-            if (lastKnownName != null) {
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            MinecraftPlayerEntity playerEntity = storageDao.getPlayerById(uuid);
+
+            if (playerEntity != null && playerEntity.lastKnownName() != null) {
                 final DiscordAccount discordAccount;
-                if(discordID != null){
-                    discordAccount = getDiscordAccount(discordID);
+                if(playerEntity.discordID() != null){
+                    discordAccount = getDiscordAccount(playerEntity.discordID());
                 }else {
                     discordAccount = null;
                 }
-                minecraftPlayer = new MinecraftPlayerImpl(uuid, lastKnownName) {
+                return new MinecraftPlayerImpl(uuid, playerEntity.lastKnownName()) {
                     @Override
                     public DiscordAccount getDiscordAccount() {
                         return discordAccount;
@@ -194,43 +140,29 @@ public class Storage {
                 };
             }
         }
-        resultSet.close();
-        return minecraftPlayer;
+        return null;
+        //throw new IllegalArgumentException("There is NO player with such id in database! DCLINK BY LITTLELIGR");
     }
 
     public boolean linkAccounts(MinecraftPlayer minecraftPlayer, DiscordAccount discordAccount) {
-        try {
-            PreparedStatement pstmt = connection.prepareStatement("UPDATE MINECRAFT_ACCOUNTS SET DISCORD_ID = ? WHERE UUID = ?;");
-            pstmt.setString(1, discordAccount.getId());
-            pstmt.setString(2, minecraftPlayer.getUuid().toString());
-            pstmt.executeUpdate();
-            pstmt.close();
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.linkAccounts(minecraftPlayer.getUuid(), discordAccount.getId());
             return true;
-        } catch (SQLException e) {
-            dcLink.getLogger().error("Error while linking accounts", e);
         }
-        return false;
     }
 
     public void unLinkAccounts(DiscordAccount discordAccount) {
-        try {
-            PreparedStatement pstmt = connection.prepareStatement("UPDATE MINECRAFT_ACCOUNTS SET DISCORD_ID = NULL WHERE DISCORD_ID = ?;");
-            pstmt.setString(1, discordAccount.getId());
-            pstmt.executeUpdate();
-            pstmt.close();
-        } catch (SQLException e) {
-            dcLink.getLogger().error("Error while unlinking accounts", e);
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.unlinkAccountsByDiscord(discordAccount.getId());
         }
     }
 
     public void unLinkAccount(MinecraftPlayer minecraftPlayer) {
-        try {
-            PreparedStatement pstmt = connection.prepareStatement("UPDATE MINECRAFT_ACCOUNTS SET DISCORD_ID = NULL WHERE UUID = ?;");
-            pstmt.setString(1, minecraftPlayer.getUuid().toString());
-            pstmt.executeUpdate();
-            pstmt.close();
-        } catch (SQLException e) {
-            dcLink.getLogger().error("Error while unlinking account", e);
+        try (Handle handle = JDBI.open()){
+            StorageDao storageDao = handle.attach(StorageDao.class);
+            storageDao.unlinkAccountsById(minecraftPlayer.getUuid());
         }
     }
 

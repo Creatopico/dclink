@@ -5,12 +5,19 @@ import com.kalimero2.team.dclink.api.DCLinkApiHolder;
 import com.kalimero2.team.dclink.api.discord.DiscordAccount;
 import com.kalimero2.team.dclink.api.discord.DiscordRole;
 import com.kalimero2.team.dclink.api.minecraft.MinecraftPlayer;
+import com.kalimero2.team.dclink.discord.DiscordAccountLinker;
 import com.kalimero2.team.dclink.discord.DiscordBot;
+import com.kalimero2.team.dclink.discord.EnterInfo;
 import com.kalimero2.team.dclink.impl.discord.DiscordRoleImpl;
 import com.kalimero2.team.dclink.impl.minecraft.MinecraftPlayerImpl;
 import com.kalimero2.team.dclink.storage.Storage;
+import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.interactions.components.ActionRow;
+import net.dv8tion.jda.api.interactions.components.LayoutComponent;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongepowered.configurate.ConfigurateException;
@@ -18,7 +25,8 @@ import org.spongepowered.configurate.ConfigurateException;
 import javax.security.auth.login.LoginException;
 import java.io.File;
 import java.sql.SQLException;
-import java.util.UUID;
+import java.util.*;
+import java.util.function.Consumer;
 
 public abstract class DCLink implements DCLinkApi {
 
@@ -50,7 +58,8 @@ public abstract class DCLink implements DCLinkApi {
             }
             logger.info("Loaded config");
             if (dcLinkConfig.getDatabaseConfiguration() != null) {
-                storage = new Storage(this, new File(getDataFolder(), dcLinkConfig.getDatabaseConfiguration().getSqliteFile()));
+                Properties connectionProperties = getProperties();
+                storage = new Storage(this, connectionProperties);
             } else {
                 logger.error("No database configuration found");
                 shutdownServer();
@@ -75,6 +84,16 @@ public abstract class DCLink implements DCLinkApi {
         }
     }
 
+    private @NotNull Properties getProperties() {
+        Properties connectionProperties = new Properties();
+        connectionProperties.put("address", dcLinkConfig.getDatabaseConfiguration().getAddress());
+        connectionProperties.put("port", dcLinkConfig.getDatabaseConfiguration().getPort());
+        connectionProperties.put("database", dcLinkConfig.getDatabaseConfiguration().getDatabase());
+        connectionProperties.put("user", dcLinkConfig.getDatabaseConfiguration().getUsername());
+        connectionProperties.put("password", dcLinkConfig.getDatabaseConfiguration().getPassword());
+        return connectionProperties;
+    }
+
     public void load() {
         if (!loaded && initialised) {
             loaded = true;
@@ -89,7 +108,6 @@ public abstract class DCLink implements DCLinkApi {
             if (discordBot != null) {
                 discordBot.shutdown();
             }
-            storage.close();
             logger.info("Shutdown complete");
         }
     }
@@ -166,6 +184,15 @@ public abstract class DCLink implements DCLinkApi {
         }
     }
 
+    public Optional<String> getDiscordID (UUID playerUUID, String playerName) {
+        MinecraftPlayer minecraftPlayer = getMinecraftPlayer(playerUUID);
+
+        if (minecraftPlayer == null || minecraftPlayer.getDiscordAccount() == null || minecraftPlayer.getDiscordAccount().getId() == null)
+            return Optional.empty();
+
+        return Optional.of(minecraftPlayer.getDiscordAccount().getId());
+    }
+
     public JoinResult onLogin(UUID playerUUID, String playerName) {
         MinecraftPlayer minecraftPlayer = getMinecraftPlayer(playerUUID);
 
@@ -184,12 +211,8 @@ public abstract class DCLink implements DCLinkApi {
             }
         } else{
             if(!playerName.equals(minecraftPlayer.getName())){
-                try {
-                    storage.setLastKnownName(minecraftPlayer.getUuid(), playerName);
-                } catch (SQLException e) {
-                    getLogger().error("Couldn't update name for player with UUID " + playerUUID + " (from " + minecraftPlayer.getName() + " to " + playerName + ")");
-                }
-                minecraftPlayer.setName(playerName);
+                Component code = dcLinkMessages.getMinifiedMessage("It's not your account lastKnownName!");
+                return JoinResult.failure(code);
             }
         }
 
@@ -198,6 +221,19 @@ public abstract class DCLink implements DCLinkApi {
             return JoinResult.failure(code);
         } else {
             return JoinResult.success(null);
+        }
+    }
+
+    public void sendMessageOnEnter(String discord_id, EnterInfo enterInfo) {
+        User user = discordBot.getJda().getUserById(discord_id);
+        if (user != null) {
+            user.openPrivateChannel().queue(privateChannel -> {
+                List<LayoutComponent> componentList = new LinkedList<>();
+                LayoutComponent c1 = ActionRow.of(Button.success("enter_success_" + discord_id, "It's me!"), Button.danger("enter_dismiss_"+discord_id, "No! It's not me!"));
+                componentList.add(c1);
+                discordBot.discordAccountLinker.enterMap.put(discord_id, enterInfo);
+                privateChannel.sendMessageComponents(componentList).queue();
+            });
         }
     }
 

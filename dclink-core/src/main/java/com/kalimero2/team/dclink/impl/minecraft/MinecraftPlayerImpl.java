@@ -38,7 +38,7 @@ public abstract class MinecraftPlayerImpl implements MinecraftPlayer {
     public String toString() {
         return "MinecraftPlayerImpl{" +
                 "uuid=" + uuid +
-                ", name=" + name +
+                ", lastKnownName=" + name +
                 '}';
     }
 

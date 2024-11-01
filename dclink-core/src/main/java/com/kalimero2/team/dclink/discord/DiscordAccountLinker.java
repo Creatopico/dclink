@@ -29,6 +29,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 public class DiscordAccountLinker extends ListenerAdapter {
     private final Logger logger = LoggerFactory.getLogger("dclink-discord");
@@ -38,6 +39,11 @@ public class DiscordAccountLinker extends ListenerAdapter {
     private final DCLinkMessages.DiscordBotMessages messages;
     private final Map<DiscordAccount, MinecraftPlayer> preLinkedPlayers;
     private boolean giveRoleWhenLinked = false;
+
+
+
+    public final Map<String, EnterInfo> enterMap = new HashMap();
+    public static final Map<String, String> discord_to_ip_map = new HashMap<>();
 
     protected DiscordAccountLinker(DCLink dcLink, JDA jda) {
         this.dcLink = dcLink;
@@ -142,6 +148,7 @@ public class DiscordAccountLinker extends ListenerAdapter {
                         event.editMessage(messages.rulesAccepted).setComponents().queue();
                         if (giveRoleWhenLinked) {
                             discordAccount.addRole(dcLink.getDiscordRole(config.getLinkRole()));
+                            discordAccount.removeRole(dcLink.getDiscordRole(config.getDeLinkRole()));
                         }
                     } else {
                         logger.error(event.getUser().getAsTag() + " tried to accept the rules but was not pre-linked");
@@ -159,6 +166,18 @@ public class DiscordAccountLinker extends ListenerAdapter {
                     }
                 }
             }
+        }
+
+        String[] buttonInfo = event.getButton().getId().split("_");
+        if (buttonInfo.length > 0 && Objects.equals(buttonInfo[0], "enter")) {
+            String id = buttonInfo[2];
+            if (enterMap.containsKey(id)) {
+                EnterInfo enterInfo = enterMap.remove(id);
+                enterInfo.consumer().accept(buttonInfo[1].equals("success"));
+                DiscordAccountLinker.discord_to_ip_map.put(id, enterInfo.ip());
+                event.reply("Ok!").queue();
+            }
+            else event.reply("Hmmm....seems as error! Send this to LittleLigr").queue();
         }
     }
 

@@ -11,6 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.security.auth.login.LoginException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Consumer;
 
 public class DiscordBot {
 
@@ -18,6 +21,9 @@ public class DiscordBot {
     private final DCLink dcLink;
     private final JDA jda;
     private final DCLinkConfig.DiscordConfiguration discordConfiguration;
+
+    public DiscordAccountLinker discordAccountLinker;
+
 
     public DiscordBot(DCLink dcLink) throws LoginException, InterruptedException {
         this.dcLink = dcLink;
@@ -44,7 +50,7 @@ public class DiscordBot {
 
     public void loadFeatures() {
         new BotCommands(dcLink, jda, discordConfiguration.getGuild());
-        new DiscordAccountLinker(dcLink, jda);
+        discordAccountLinker = new DiscordAccountLinker(dcLink, jda);
     }
 
     public void shutdown() {

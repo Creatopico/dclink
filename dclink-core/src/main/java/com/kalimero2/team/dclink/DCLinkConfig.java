@@ -17,6 +17,7 @@ public class DCLinkConfig {
     private final DatabaseConfiguration databaseConfiguration;
     private final DiscordConfiguration discordConfiguration;
     private final LinkingConfiguration linkingConfiguration;
+    private final MapConfiguration mapConfiguration;
 
 
     public DCLinkConfig(String configPath) throws ConfigurateException {
@@ -34,6 +35,7 @@ public class DCLinkConfig {
         databaseConfiguration = node.node("database").get(DatabaseConfiguration.class);
         discordConfiguration = node.node("discord").get(DiscordConfiguration.class);
         linkingConfiguration = node.node("linking").get(LinkingConfiguration.class);
+        mapConfiguration = node.node("map").get(MapConfiguration.class);
 
         if (!config.exists()) {
             save();
@@ -44,6 +46,7 @@ public class DCLinkConfig {
         node.node("database").set(DatabaseConfiguration.class, databaseConfiguration);
         node.node("discord").set(DiscordConfiguration.class, discordConfiguration);
         node.node("linking").set(LinkingConfiguration.class, linkingConfiguration);
+        node.node("map").set(MapConfiguration.class, mapConfiguration);
         loader.save(node);
     }
 
@@ -59,17 +62,118 @@ public class DCLinkConfig {
         return linkingConfiguration;
     }
 
+    public MapConfiguration getMapConfiguration() {
+        return mapConfiguration;
+    }
+
     @ConfigSerializable
     public static class DatabaseConfiguration {
-        @Comment("The Sqlite database filename")
-        private String sqliteFile = "dclink.db";
 
-        public String getSqliteFile() {
-            return sqliteFile;
+        @Comment("The Postgres database address")
+        private String address = "";
+
+        @Comment("The Postgres database address")
+        private String port = "";
+
+        @Comment("The Postgres database address")
+        private String database = "";
+
+        @Comment("The Postgres database address")
+        private String username = "";
+
+        @Comment("The Postgres database address")
+        private String password = "";
+
+        public String getAddress() {
+            return address;
         }
 
-        public void setSqliteFile(String sqliteFile) {
-            this.sqliteFile = sqliteFile;
+        public void setAddress(String address) {
+            this.address = address;
+        }
+
+        public String getDatabase() {
+            return database;
+        }
+
+        public void setDatabase(String database) {
+            this.database = database;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public String getPort() {
+            return port;
+        }
+
+        public void setPort(String port) {
+            this.port = port;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+    }
+
+    @ConfigSerializable
+    public static class MapConfiguration {
+        private String fileName = "fabric.nbt";
+
+        private int mapX = 0;
+        private int mapY = 0;
+        private int mapZ = 0;
+
+        @Comment("0=survival 1=creative 2=adventure 3=spectator")
+        private int gamemode = 1;
+
+        public int getGamemode() {
+            return gamemode;
+        }
+
+        public void setGamemode(int gamemode) {
+            this.gamemode = gamemode;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public void setFileName(String fileName) {
+            this.fileName = fileName;
+        }
+
+        public int getMapX() {
+            return mapX;
+        }
+
+        public void setMapX(int mapX) {
+            this.mapX = mapX;
+        }
+
+        public int getMapY() {
+            return mapY;
+        }
+
+        public void setMapY(int mapY) {
+            this.mapY = mapY;
+        }
+
+        public int getMapZ() {
+            return mapZ;
+        }
+
+        public void setMapZ(int mapZ) {
+            this.mapZ = mapZ;
         }
     }
 
@@ -83,6 +187,9 @@ public class DCLinkConfig {
         private String linkChannel = "";
         @Comment("Role ID of the role that the bot will give to the linked players (If left blank, the bot will not give any roles)")
         private @Nullable String linkRole = "";
+
+        @Comment("Role ID of the role that the bot will take away from user")
+        private @Nullable String delinkRole = "";
         @Comment("Message to show on the bot's status")
         private String statusMessage = "Minecraft";
 
@@ -117,6 +224,15 @@ public class DCLinkConfig {
 
         public void setLinkRole(String linkRole) {
             this.linkRole = linkRole;
+        }
+
+        @Nullable
+        public String getDeLinkRole() {
+            return delinkRole;
+        }
+
+        public void setDeLinkRole(String linkRole) {
+            this.delinkRole = linkRole;
         }
 
         public String getStatusMessage() {
